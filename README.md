@@ -40,7 +40,7 @@ The repo is **private for now**, so the one-liner above only works once it is ma
 | Media files | The NAS | Re-mounted via NFS; not copied. |
 | Immich photos | Backblaze B2 (`rclone` job) | The restore step offers to download them. Then in Immich choose *Restore from backup* and pick the newest database dump. |
 | Immich thumbnails / transcodes | Regenerated | Immich rebuilds them. |
-| Kona Books app data | Docker volume, backed up to B2 by its own jobs | Redeploy the stack, then import the newest backup zip in the app. |
+| Data of apps you built yourself | Docker volumes (not in the file backup) | Back them up separately (e.g. to B2) and restore through the app. |
 | Cloudflare / B2 / Plex-claim tokens | Prompted when needed (or inside the restored `/srv/kona-secrets`) | Never stored in this repo. |
 
 ## Adding a program later

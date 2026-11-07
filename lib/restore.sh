@@ -23,7 +23,7 @@ restore_prompt() {
 
     echo ""
     echo "  Where is the restic repository?"
-    echo "    1) NFS share        (e.g. 192.168.50.50:/volume1/Backups)"
+    echo "    1) NFS share        (e.g. 192.168.1.20:/volume1/Backups)"
     echo "    2) Folder on this machine  (USB drive, or an already-mounted NAS path)"
     echo "    3) Remote restic URL       (b2:bucket:path, sftp:user@host:/path, s3:..., rest:...)"
     local choice sub
@@ -31,8 +31,8 @@ restore_prompt() {
     case "$choice" in
         1)
             read -r -p "  NFS export (host:/path): " RESTORE_NFS
-            read -r -p "  Repository folder inside that share [Docker/Franklin]: " sub
-            RESTORE_REPO_SUB="${sub:-Docker/Franklin}"
+            read -r -p "  Repository folder inside that share [Docker/<old-hostname>]: " sub
+            RESTORE_REPO_SUB="${sub:-Docker/$(hostname -s)}"
             RESTORE_KIND=nfs ;;
         2)
             read -r -p "  Full path of the repository folder: " RESTORE_REPO
@@ -106,7 +106,7 @@ restore_run() {
     RESTORED=1
 }
 
-# Re-create the containers that were managed from Portainer (e.g. your Kona
+# Re-create the containers that were managed from Portainer (e.g. your own
 # apps). The restore brings back Portainer's stack folders; here we start them.
 restore_extras() {
     [[ "${RESTORED:-0}" == "1" ]] || return 0
@@ -142,8 +142,8 @@ restore_extras() {
         echo ""
         echo "${BOLD}── Immich photos ──${RESET}"
         local bucket
-        read -r -p "  B2 bucket holding the photo backup [kona-immich-backup]: " bucket
-        bucket="${bucket:-kona-immich-backup}"
+        read -r -p "  B2 bucket holding the photo backup (blank to skip): " bucket
+        [[ -n "$bucket" ]] || return 0
         if yesno "Download photos from b2:${bucket} into ${IMMICH_UPLOAD_LOCATION}? (can be 100+ GB)" n; then
             sudo rclone --config /srv/kona-secrets/rclone.conf copy "b2:${bucket}" "${IMMICH_UPLOAD_LOCATION}" \
                 --transfers 8 --checkers 16 --stats-one-line --stats 1m
