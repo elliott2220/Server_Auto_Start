@@ -1,0 +1,48 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  App catalog — this file drives the install menu, the deploy step and the
+#  URL summary. To offer a new program:
+#    1. add ONE line here
+#    2. add its service(s) to docker-compose.yaml with  profiles: [<name>]
+#  That's it. (Needs a prompt/secret? add a small block in install.sh.)
+#
+#  Columns (pipe-separated):
+#    name | group | menu label | web port | url path | compose profile | dirs
+#
+#    name     menu id, used by is_selected()
+#    port     web UI port for the summary ("-" = no UI)
+#    profile  compose profile to enable (blank = same as name)
+#    dirs     comma-separated folders to create under $DOCKERPATH
+# ─────────────────────────────────────────────────────────────────────────────
+wud|Infrastructure|WUD               Container update notifications|3000||wud|infrastructure/wud
+netdata|Infrastructure|Netdata           System monitoring|19999||netdata|
+duckdns|Infrastructure|DuckDNS           Dynamic DNS|-||duckdns|infrastructure/duckdns
+uptime-kuma|Infrastructure|Uptime Kuma       Uptime monitoring|3001||uptime-kuma|infrastructure/uptime-kuma
+speedtest|Infrastructure|Speedtest         Network speed test|8223||speedtest|
+backup|Infrastructure|Backrest          Backup UI + ready-made plan|9898||backrest|
+dozzle|Infrastructure|Dozzle            Live container log viewer|8888||dozzle|
+homepage|Infrastructure|Homepage          Start-page dashboard for everything|3002||homepage|infrastructure/homepage
+nzbget|Downloaders|NZBGet            Usenet downloader|6789||nzbget|mediaserver/nzbget
+qbittorrentvpn|Downloaders|qBittorrent+VPN   Torrent client|8080||qbittorrentvpn|
+prowlarr|*ARR!|Prowlarr          Indexer manager|9696||prowlarr|
+sonarr|*ARR!|Sonarr            TV show automation|8989||sonarr|
+radarr|*ARR!|Radarr            Movie automation|7878||radarr|
+lidarr|*ARR!|Lidarr            Music automation|8686||lidarr|mediaserver/lidarr
+bazarr|*ARR!|Bazarr            Subtitle automation|6767||bazarr|mediaserver/bazarr
+tdarr|*ARR!|Tdarr             Media transcoding (Intel QSV)|8265||tdarr|
+plex|Media Server|Plex              Media server|32400|/web|plex|
+jellyfin|Media Server|Jellyfin          Media server (free alternative)|8096||jellyfin|mediaserver/jellyfin
+seerr|Media Server|Seerr             Media requests|5055||seerr|
+tautulli|Media Server|Tautulli          Plex statistics|8181||tautulli|mediaserver/tautulli
+navidrome|Media Server|Navidrome         Music streaming server|4533||navidrome|mediaserver/navidrome
+audiobookshelf|Books|Audiobookshelf    Audiobook & podcast server|13378||audiobookshelf|
+grimmory|Books|Grimmory          Book library & reader|6069||grimmory|
+shelfmark|Books|Shelfmark         Book & audiobook downloader|8084||shelfmark|
+immich|Private Cloud|Immich            Photo & video backup|2283||immich|
+seafile|Private Cloud|Seafile           File sync & share|8090||seafile|
+vaultwarden|Private Cloud|Vaultwarden       Password manager|8222||vaultwarden|
+paperless|Private Cloud|Paperless-ngx     Scan, OCR & file your documents|8000||paperless|
+flaresolverr|*ARR!|FlareSolverr       Lets Prowlarr past Cloudflare-protected indexers|8191||flaresolverr|
+maintainerr|Media Server|Maintainerr       Auto-clean media nobody watches (Plex/arr)|6246||maintainerr|infrastructure/maintainerr
+stirling-pdf|Private Cloud|Stirling-PDF      Merge, split, OCR, sign PDFs|8082||stirling-pdf|infrastructure/stirling-pdf
+syncthing|Private Cloud|Syncthing         Continuous file sync between devices|8384||syncthing|cloudservices/syncthing
+ntfy|Infrastructure|ntfy              Push notifications to your phone|8095||ntfy|infrastructure/ntfy

@@ -1,0 +1,924 @@
+networks:
+  internal:
+    external: true
+  external:
+    external: true
+
+services:
+
+  # ── Infrastructure ────────────────────────────────────────────────
+
+  portainer-ce:
+    container_name: portainer
+    profiles: [portainer]
+    ports:
+      - 9000:9000
+    privileged: false
+    entrypoint:
+      - /portainer
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DOCKERPATH}/infrastructure/portainer/data:/data
+    networks:
+      - internal
+    restart: always
+    image: portainer/portainer-ce
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  wud:
+    container_name: wud
+    profiles: [wud]
+    image: getwud/wud
+    ports:
+      - 3000:3000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DOCKERPATH}/infrastructure/wud:/store
+    networks:
+      - internal
+    restart: unless-stopped
+    environment:
+      - WUD_WATCHER_LOCAL_CRON=0 0 * * *
+      - WUD_TRIGGER_LOCAL_KIND=docker
+      - WUD_TRIGGER_LOCAL_PRUNE=true
+
+  netdata:
+    container_name: netdata
+    profiles: [netdata]
+    ports:
+      - 19999:19999
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - internal
+    restart: always
+    image: netdata/netdata
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  duckdns:
+    image: lscr.io/linuxserver/duckdns:latest
+    container_name: duckdns
+    profiles: [duckdns]
+    networks:
+      - external
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - SUBDOMAINS=${DOMAINNAME}
+      - TOKEN=${DUCKDNSTOKEN}
+      - LOG_FILE=false
+    volumes:
+      - ${DOCKERPATH}/infrastructure/duckdns:/config
+    restart: unless-stopped
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    profiles: [cloudflared]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CF_TUNNEL_TOKEN}
+    networks:
+      - external
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  uptime-kuma:
+    container_name: uptime-kuma
+    profiles: [uptime-kuma]
+    image: louislam/uptime-kuma:1
+    restart: always
+    ports:
+      - 3001:3001
+    networks:
+      - internal
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DOCKERPATH}/infrastructure/uptime-kuma:/app/data
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  speedtest:
+    container_name: speedtest
+    profiles: [speedtest]
+    ports:
+      - 8223:8223
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TITLE=${DOMAINNAME}
+      - WEBPORT=8223
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - internal
+    restart: always
+    image: adolfintel/speedtest
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  # ── Downloaders ───────────────────────────────────────────────────
+
+  nzbget:
+    container_name: nzbget
+    profiles: [nzbget]
+    ports:
+      - 6789:6789
+    environment:
+      - LC_ALL=C
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - HOME=/root
+      - TERM=xterm
+    volumes:
+      - /etc/localtime:/etc/localtime
+      - ${DOCKERPATH}/mediaserver/nzbget:/config
+      - ${PROCESSPATH}:${PROCESSPATH}
+      - ${MEDIAPATH}:/mnt/Media
+      - /tmp:/tmp
+    networks:
+      - internal
+    restart: always
+    image: linuxserver/nzbget:latest
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  gluetun:
+    container_name: gluetun
+    profiles: [qbittorrentvpn]
+    image: qmcgaw/gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      - 8080:8080
+    volumes:
+      - ${DOCKERPATH}/mediaserver/gluetun:/gluetun
+    environment:
+      - VPN_SERVICE_PROVIDER=custom
+      - VPN_TYPE=${GLUETUN_VPN_TYPE}
+      - OPENVPN_CUSTOM_CONFIG=/gluetun/custom.conf
+      - OPENVPN_USER=${OPENVPN_USER:-}
+      - OPENVPN_PASSWORD=${OPENVPN_PASSWORD:-}
+      - FIREWALL_INPUT_PORTS=8080
+    networks:
+      - internal
+    restart: unless-stopped
+
+  qbittorrent:
+    container_name: qbittorrent
+    profiles: [qbittorrentvpn]
+    image: lscr.io/linuxserver/qbittorrent:latest
+    network_mode: service:gluetun
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - WEBUI_PORT=8080
+    volumes:
+      - ${DOCKERPATH}/mediaserver/qbittorrent:/config
+      - ${MEDIAPATH}:/mnt/Media
+      - ${PROCESSPATH}:${PROCESSPATH}
+    restart: unless-stopped
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  # ── *ARR! ─────────────────────────────────────────────────────────
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    profiles: [prowlarr]
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${DOCKERPATH}/mediaserver/prowlarr:/config
+    ports:
+      - 9696:9696
+    networks:
+      - internal
+    restart: always
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  sonarr:
+    container_name: sonarr
+    profiles: [sonarr]
+    ports:
+      - 8989:8989
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - HOME=/root
+      - TERM=xterm
+      - XDG_CONFIG_HOME=/config/xdg
+      - LANGUAGE=en_US.UTF-8
+      - LANG=en_US.UTF-8
+    volumes:
+      - /etc/localtime:/etc/localtime
+      - ${DOCKERPATH}/mediaserver/sonarr:/config
+      - ${MEDIAPATH}:/mnt/Media
+      - ${PROCESSPATH}:${PROCESSPATH}
+    networks:
+      - internal
+    restart: always
+    image: linuxserver/sonarr:latest
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  radarr:
+    container_name: radarr
+    profiles: [radarr]
+    ports:
+      - 7878:7878
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - HOME=/root
+      - TERM=xterm
+      - XDG_CONFIG_HOME=/config/xdg
+      - LANGUAGE=en_US.UTF-8
+      - LANG=en_US.UTF-8
+    volumes:
+      - /etc/localtime:/etc/localtime
+      - ${DOCKERPATH}/mediaserver/radarr:/config
+      - ${MEDIAPATH}:/mnt/Media
+      - ${PROCESSPATH}:${PROCESSPATH}
+    networks:
+      - internal
+    restart: always
+    image: linuxserver/radarr:latest
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  tdarr:
+    container_name: tdarr_server
+    profiles: [tdarr]
+    volumes:
+      - ${DOCKERPATH}/mediaserver/tdarr/server:/app/server
+      - ${DOCKERPATH}/mediaserver/tdarr/configs:/app/configs
+      - ${DOCKERPATH}/mediaserver/tdarr/logs:/app/logs
+      - ${MEDIAPATH}:/mnt/Media
+      - ${PROCESSPATH}:${PROCESSPATH}
+    environment:
+      - serverIP=0.0.0.0
+      - serverPort=8266
+      - webUIPort=8265
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+    ports:
+      - 8265:8265
+      - 8266:8266
+    networks:
+      - internal
+    restart: always
+    image: haveagitgat/tdarr
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  tdarr_node:
+    container_name: tdarr_node
+    profiles: [tdarr]
+    volumes:
+      - ${DOCKERPATH}/mediaserver/tdarr/configs:/app/configs
+      - ${DOCKERPATH}/mediaserver/tdarr/logs:/app/logs
+      - ${MEDIAPATH}:/mnt/Media
+      - ${PROCESSPATH}:${PROCESSPATH}
+    network_mode: service:tdarr
+    environment:
+      - nodeID=Node01
+      - serverIP=0.0.0.0
+      - serverPort=8266
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+    devices:
+      - ${DRI_DEVICE:-/dev/dri}:/dev/dri
+    restart: always
+    image: haveagitgat/tdarr_node
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  # ── Media Server ──────────────────────────────────────────────────
+
+  pms-docker:
+    container_name: plex
+    profiles: [plex]
+    devices:
+      - ${DRI_DEVICE:-/dev/dri}:/dev/dri
+    ports:
+      - 32400:32400/tcp
+      - 3005:3005/tcp
+      - 8324:8324/tcp
+      - 32469:32469/tcp
+      - 1900:1900/udp
+      - 32410:32410/udp
+      - 32412:32412/udp
+      - 32413:32413/udp
+      - 32414:32414/udp
+    environment:
+      - TZ=${TZ}
+      - PLEX_CLAIM=${PLEXCLAIM}
+    networks:
+      - internal
+      - external
+    volumes:
+      - ${DOCKERPATH}/mediaserver/plex/database:/config
+      - /dev/shm:/transcode
+      - ${MEDIAPATH}:/mnt/Media
+    restart: always
+    image: plexinc/pms-docker
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  seerr:
+    container_name: seerr
+    profiles: [seerr]
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    ports:
+      - 5055:5055
+    volumes:
+      - ${DOCKERPATH}/mediaserver/seerr/config:/app/config
+    networks:
+      - internal
+    restart: unless-stopped
+    image: ghcr.io/seerr-team/seerr:latest
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  audiobookshelf:
+    container_name: audiobookshelf
+    profiles: [audiobookshelf]
+    image: ghcr.io/advplyr/audiobookshelf:latest
+    ports:
+      - 13378:80
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${DOCKERPATH}/mediaserver/audiobookshelf/config:/config
+      - ${DOCKERPATH}/mediaserver/audiobookshelf/metadata:/metadata
+      - ${BOOKSPATH}:/audiobooks
+    networks:
+      - internal
+    restart: unless-stopped
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  # ── Books ─────────────────────────────────────────────────────────
+
+  grimmory-db:
+    container_name: grimmory-db
+    profiles: [grimmory]
+    image: mariadb:11
+    environment:
+      - MARIADB_DATABASE=grimmory
+      - MARIADB_USER=grimmory
+      - MARIADB_PASSWORD=${GRIMMORY_DB_PASSWORD}
+      - MARIADB_ROOT_PASSWORD=${GRIMMORY_DB_PASSWORD}
+      - TZ=${TZ}
+    volumes:
+      - ${DOCKERPATH}/mediaserver/grimmory/db:/var/lib/mysql
+    networks:
+      - internal
+    restart: unless-stopped
+
+  grimmory:
+    container_name: grimmory
+    profiles: [grimmory]
+    image: ghcr.io/grimmory-tools/grimmory:latest
+    ports:
+      - 6069:6069
+    environment:
+      - USER_ID=${PUID}
+      - GROUP_ID=${PGID}
+      - TZ=${TZ}
+      - DATABASE_URL=jdbc:mariadb://grimmory-db:3306/grimmory
+      - DATABASE_USERNAME=grimmory
+      - DATABASE_PASSWORD=${GRIMMORY_DB_PASSWORD}
+      - BOOKLORE_PORT=6069
+    volumes:
+      - ${DOCKERPATH}/mediaserver/grimmory/data:/app/data
+      - ${BOOKSPATH}:/books
+    depends_on:
+      - grimmory-db
+    networks:
+      - internal
+    restart: unless-stopped
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  shelfmark:
+    container_name: shelfmark
+    profiles: [shelfmark]
+    image: ghcr.io/calibrain/shelfmark:latest
+    ports:
+      - 8084:8084
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${DOCKERPATH}/mediaserver/shelfmark:/config
+      - ${BOOKSPATH}:/books
+    networks:
+      - internal
+    restart: unless-stopped
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  # Mirrors the setup running on the original server (Immich v3, VectorChord
+  # Postgres, Valkey). Photos live in /data inside the container.
+  immich-server:
+    container_name: immich_server
+    profiles: [immich]
+    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
+    ports:
+      - 2283:2283
+    environment:
+      - DB_HOSTNAME=immich-postgres
+      - DB_USERNAME=immich
+      - DB_PASSWORD=${IMMICH_DB_PASSWORD}
+      - DB_DATABASE_NAME=immich
+      - REDIS_HOSTNAME=immich-redis
+      - TZ=${TZ}
+    volumes:
+      - ${IMMICH_UPLOAD_LOCATION}:/data
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      - immich-redis
+      - immich-postgres
+    networks:
+      - internal
+    restart: always
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  immich-machine-learning:
+    container_name: immich_machine_learning
+    profiles: [immich]
+    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-release}
+    volumes:
+      - ${DOCKERPATH}/cloudservices/immich/model-cache:/cache
+    environment:
+      - DB_HOSTNAME=immich-postgres
+      - DB_USERNAME=immich
+      - DB_PASSWORD=${IMMICH_DB_PASSWORD}
+      - DB_DATABASE_NAME=immich
+      - REDIS_HOSTNAME=immich-redis
+    networks:
+      - internal
+    restart: always
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  immich-redis:
+    container_name: immich_redis
+    profiles: [immich]
+    image: docker.io/valkey/valkey:9-alpine
+    healthcheck:
+      test: redis-cli ping || exit 1
+    networks:
+      - internal
+    restart: always
+
+  immich-postgres:
+    container_name: immich_postgres
+    profiles: [immich]
+    # Keep this tag in step with Immich's release notes — the database image is
+    # the one component that must not simply float to "latest".
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0
+    environment:
+      - POSTGRES_PASSWORD=${IMMICH_DB_PASSWORD}
+      - POSTGRES_USER=immich
+      - POSTGRES_DB=immich
+      - POSTGRES_INITDB_ARGS=--data-checksums
+    volumes:
+      - ${IMMICH_DB_LOCATION}:/var/lib/postgresql/data
+    shm_size: 128mb
+    networks:
+      - internal
+    restart: always
+
+  seafile:
+    container_name: seafile
+    profiles: [seafile]
+    image: seafileltd/seafile-mc:latest
+    ports:
+      - 8090:80
+    volumes:
+      - ${DOCKERPATH}/cloudservices/seafile/data:/shared
+      - ${SEAFILE_STORAGE_PATH}:/shared/seafile/seafile-data
+    environment:
+      - DB_HOST=seafile-db
+      - DB_ROOT_PASSWD=${SEAFILE_DB_ROOT_PASSWORD}
+      - SEAFILE_ADMIN_EMAIL=${SEAFILE_ADMIN_EMAIL}
+      - SEAFILE_ADMIN_PASSWORD=${SEAFILE_ADMIN_PASSWORD}
+      - SEAFILE_SERVER_HOSTNAME=${SEAFILE_HOSTNAME}
+      - SEAFILE_SERVER_LETSENCRYPT=false
+      - TIME_ZONE=${TZ}
+    depends_on:
+      - seafile-db
+      - seafile-memcached
+    networks:
+      - internal
+    restart: always
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  seafile-db:
+    container_name: seafile-db
+    profiles: [seafile]
+    image: mariadb:10.11
+    environment:
+      - MYSQL_ROOT_PASSWORD=${SEAFILE_DB_ROOT_PASSWORD}
+      - MYSQL_LOG_CONSOLE=true
+    volumes:
+      - ${DOCKERPATH}/cloudservices/seafile/db:/var/lib/mysql
+    networks:
+      - internal
+    restart: always
+
+  seafile-memcached:
+    container_name: seafile-memcached
+    profiles: [seafile]
+    image: memcached:1.6-alpine
+    entrypoint: memcached -m 256
+    networks:
+      - internal
+    restart: always
+
+  backrest:
+    container_name: backrest
+    profiles: [backrest]
+    image: ghcr.io/garethgeorge/backrest:latest
+    ports:
+      - 9898:9898
+    volumes:
+      - ${DOCKERPATH}/cloudservices/backrest/data:/data
+      - ${DOCKERPATH}/cloudservices/backrest/config:/config
+      - ${DOCKERPATH}/cloudservices/backrest/cache:/cache
+      - ${DOCKERPATH}/cloudservices/backrest/tmp:/tmp
+      - ${DOCKERPATH}:${DOCKERPATH}
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /usr/bin/docker:/usr/bin/docker:ro
+      - /mnt/Backups:/mnt/Backups
+      - /srv/kona-secrets:/srv/kona-secrets
+    environment:
+      - BACKREST_DATA=/data
+      - BACKREST_CONFIG=/config/config.json
+      - XDG_CACHE_HOME=/cache
+      - TMPDIR=/tmp
+      - TZ=${TZ}
+    networks:
+      - internal
+    restart: unless-stopped
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  vaultwarden:
+    container_name: vaultwarden
+    profiles: [vaultwarden]
+    image: vaultwarden/server:latest
+    ports:
+      - 8222:80
+    volumes:
+      - ${DOCKERPATH}/cloudservices/vaultwarden:/data
+    environment:
+      - WEBSOCKET_ENABLED=true
+      - DOMAIN=${VAULTWARDEN_DOMAIN}
+      - SIGNUPS_ALLOWED=false
+    networks:
+      - internal
+    restart: unless-stopped
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  # ── Added apps ────────────────────────────────────────────────────
+  # (Each needs only a line in apps.txt + a service here with a matching profile.)
+
+  lidarr:
+    container_name: lidarr
+    profiles: [lidarr]
+    image: lscr.io/linuxserver/lidarr:latest
+    ports:
+      - 8686:8686
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${DOCKERPATH}/mediaserver/lidarr:/config
+      - ${MEDIAPATH}:/mnt/Media
+      - ${PROCESSPATH}:${PROCESSPATH}
+    networks:
+      - internal
+    restart: unless-stopped
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  bazarr:
+    container_name: bazarr
+    profiles: [bazarr]
+    image: lscr.io/linuxserver/bazarr:latest
+    ports:
+      - 6767:6767
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${DOCKERPATH}/mediaserver/bazarr:/config
+      - ${MEDIAPATH}:/mnt/Media
+    networks:
+      - internal
+    restart: unless-stopped
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  jellyfin:
+    container_name: jellyfin
+    profiles: [jellyfin]
+    image: lscr.io/linuxserver/jellyfin:latest
+    ports:
+      - 8096:8096
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    devices:
+      - ${DRI_DEVICE:-/dev/dri}:/dev/dri
+    volumes:
+      - ${DOCKERPATH}/mediaserver/jellyfin:/config
+      - ${MEDIAPATH}:/mnt/Media:ro
+    networks:
+      - internal
+    restart: unless-stopped
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  tautulli:
+    container_name: tautulli
+    profiles: [tautulli]
+    image: lscr.io/linuxserver/tautulli:latest
+    ports:
+      - 8181:8181
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${DOCKERPATH}/mediaserver/tautulli:/config
+    networks:
+      - internal
+    restart: unless-stopped
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  navidrome:
+    container_name: navidrome
+    profiles: [navidrome]
+    image: deluan/navidrome:latest
+    ports:
+      - 4533:4533
+    environment:
+      - ND_LOGLEVEL=info
+      - TZ=${TZ}
+    user: "${PUID}:${PGID}"
+    volumes:
+      - ${DOCKERPATH}/mediaserver/navidrome:/data
+      - ${MEDIAPATH}/Music:/music:ro
+    networks:
+      - internal
+    restart: unless-stopped
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  dozzle:
+    container_name: dozzle
+    profiles: [dozzle]
+    image: amir20/dozzle:latest
+    ports:
+      - 8888:8080
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - internal
+    restart: unless-stopped
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  homepage:
+    container_name: homepage
+    profiles: [homepage]
+    image: ghcr.io/gethomepage/homepage:latest
+    ports:
+      - 3002:3000
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - HOMEPAGE_ALLOWED_HOSTS=${HOMEPAGE_ALLOWED_HOSTS}
+    volumes:
+      - ${DOCKERPATH}/infrastructure/homepage:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - internal
+    restart: unless-stopped
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  paperless:
+    container_name: paperless
+    profiles: [paperless]
+    image: ghcr.io/paperless-ngx/paperless-ngx:latest
+    ports:
+      - 8000:8000
+    environment:
+      - PAPERLESS_REDIS=redis://paperless-broker:6379
+      - PAPERLESS_DBHOST=paperless-db
+      - PAPERLESS_DBUSER=paperless
+      - PAPERLESS_DBPASS=${PAPERLESS_DB_PASSWORD}
+      - PAPERLESS_SECRET_KEY=${PAPERLESS_SECRET_KEY}
+      - PAPERLESS_TIME_ZONE=${TZ}
+      - USERMAP_UID=${PUID}
+      - USERMAP_GID=${PGID}
+    volumes:
+      - ${DOCKERPATH}/cloudservices/paperless/data:/usr/src/paperless/data
+      - ${DOCKERPATH}/cloudservices/paperless/media:/usr/src/paperless/media
+      - ${DOCKERPATH}/cloudservices/paperless/export:/usr/src/paperless/export
+      - ${DOCKERPATH}/cloudservices/paperless/consume:/usr/src/paperless/consume
+    depends_on:
+      - paperless-db
+      - paperless-broker
+    networks:
+      - internal
+    restart: unless-stopped
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  paperless-db:
+    container_name: paperless-db
+    profiles: [paperless]
+    image: docker.io/library/postgres:17
+    environment:
+      - POSTGRES_DB=paperless
+      - POSTGRES_USER=paperless
+      - POSTGRES_PASSWORD=${PAPERLESS_DB_PASSWORD}
+    volumes:
+      - ${DOCKERPATH}/cloudservices/paperless/db:/var/lib/postgresql/data
+    networks:
+      - internal
+    restart: unless-stopped
+
+  paperless-broker:
+    container_name: paperless-broker
+    profiles: [paperless]
+    image: docker.io/valkey/valkey:9-alpine
+    networks:
+      - internal
+    restart: unless-stopped
+
+  flaresolverr:
+    container_name: flaresolverr
+    profiles: [flaresolverr]
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    ports:
+      - 8191:8191
+    environment:
+      - LOG_LEVEL=info
+      - TZ=${TZ}
+    networks:
+      - internal
+    restart: unless-stopped
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  maintainerr:
+    container_name: maintainerr
+    profiles: [maintainerr]
+    image: ghcr.io/jorenn92/maintainerr:latest
+    user: "${PUID}:${PGID}"
+    ports:
+      - 6246:6246
+    environment:
+      - TZ=${TZ}
+    volumes:
+      - ${DOCKERPATH}/infrastructure/maintainerr:/opt/data
+    networks:
+      - internal
+    restart: unless-stopped
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  stirling-pdf:
+    container_name: stirling-pdf
+    profiles: [stirling-pdf]
+    image: docker.stirlingpdf.com/stirlingtools/stirling-pdf:latest
+    ports:
+      - 8082:8080
+    environment:
+      - DOCKER_ENABLE_SECURITY=false
+      - LANGS=en_GB
+    volumes:
+      - ${DOCKERPATH}/infrastructure/stirling-pdf:/configs
+    networks:
+      - internal
+    restart: unless-stopped
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  syncthing:
+    container_name: syncthing
+    profiles: [syncthing]
+    image: lscr.io/linuxserver/syncthing:latest
+    ports:
+      - 8384:8384
+      - 22000:22000/tcp
+      - 22000:22000/udp
+      - 21027:21027/udp
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${DOCKERPATH}/cloudservices/syncthing:/config
+    networks:
+      - internal
+    restart: unless-stopped
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
+
+  ntfy:
+    container_name: ntfy
+    profiles: [ntfy]
+    image: binwiederhier/ntfy:latest
+    command: serve
+    ports:
+      - 8095:80
+    environment:
+      - TZ=${TZ}
+    volumes:
+      - ${DOCKERPATH}/infrastructure/ntfy:/var/cache/ntfy
+    networks:
+      - internal
+    restart: unless-stopped
+    labels:
+      - wud.watch=true
+      - wud.trigger.local=true
