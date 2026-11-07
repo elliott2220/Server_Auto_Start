@@ -7,12 +7,12 @@ Rebuild a home server on a blank **AlmaLinux** machine with one command: pick th
 ## One-command install (fresh headless Alma box)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/elliott2220/Frank_auto_start/main/bootstrap.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/elliott2220/Server_Auto_Start/main/bootstrap.sh | sudo bash
 ```
 
 That installs `git`, downloads this repo to `/opt/homelab-installer`, and starts the installer. Run `sudo homelab-install` any time afterwards to **add more apps** or update the installer.
 
-Run it as root (the command above uses sudo). Prefer to read it first? `git clone https://github.com/elliott2220/Frank_auto_start.git` and run `sudo ./install.sh`.
+Run it as root (the command above uses sudo). Prefer to read it first? `git clone https://github.com/elliott2220/Server_Auto_Start.git` and run `sudo ./install.sh`.
 
 ## What it does, in order
 
