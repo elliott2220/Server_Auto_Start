@@ -2,7 +2,7 @@
 
 Rebuild a home server on a blank **AlmaLinux** machine with one command: pick the apps you want, optionally restore your last backup, done.
 
-> Forked from [btaylor188/privatecloud](https://github.com/btaylor188/privatecloud) (menu + docker-compose profiles), then extended with system prep, backup/restore, a catalog-driven menu, and more apps.
+> Forked, with the original author's permission, from [btaylor188/privatecloud](https://github.com/btaylor188/privatecloud) (menu + docker-compose profiles), then extended with system prep, backup/restore, a catalog-driven menu, and more apps.
 
 ## One-command install (fresh headless Alma box)
 
@@ -12,7 +12,7 @@ curl -fsSL https://raw.githubusercontent.com/elliott2220/Frank_auto_start/main/b
 
 That installs `git`, downloads this repo to `/opt/homelab-installer`, and starts the installer. Run `sudo homelab-install` any time afterwards to **add more apps** or update the installer.
 
-The repo is **private for now**, so the one-liner above only works once it is made public. Until then, on the new machine: `dnf -y install git && git clone https://github.com/elliott2220/Frank_auto_start.git /opt/homelab-installer` (git will ask for a GitHub token), then `sudo /opt/homelab-installer/install.sh`.
+Run it as root (the command above uses sudo). Prefer to read it first? `git clone https://github.com/elliott2220/Frank_auto_start.git` and run `sudo ./install.sh`.
 
 ## What it does, in order
 
@@ -78,6 +78,8 @@ Unpackerr and Recyclarr (need Sonarr/Radarr API keys — a prompt block), Scruti
 - Container logs are capped (3 × 10 MB), because Docker's default is unbounded.
 
 ## Honest limits
+
+**Use at your own risk.** This is a personal project. Read the scripts before running them as root, and test the restore path on a spare machine first.
 
 - Written against AlmaLinux 10 and validated by static checks (`bash -n`, `docker compose config` with every profile enabled, no duplicate container names or port clashes). It has **not** been run end-to-end on a blank machine — do a test run on a spare box or VM before you depend on it, especially the restore path.
 - Restic restores file contents and permissions; databases that were copied while running (Plex, Sonarr/Radarr SQLite) are restored as-is. Sonarr/Radarr also keep their own zip backups inside their config folders.
