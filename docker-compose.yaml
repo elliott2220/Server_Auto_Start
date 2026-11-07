@@ -326,6 +326,9 @@ services:
       - ${DRI_DEVICE:-/dev/dri}:/dev/dri
     restart: always
     image: haveagitgat/tdarr_node
+    cpu_shares: 256
+    mem_limit: 8g
+    memswap_limit: 8g
     labels:
       - wud.watch=true
       - wud.trigger.local=true
